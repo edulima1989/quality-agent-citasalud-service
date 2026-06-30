@@ -1,0 +1,116 @@
+{
+  "proyecto": "citasalud-service",
+  "version": "1.0.0",
+  "fecha": "2026-06-29",
+  "commit": "N/A (no git repo en directorio del proyecto)",
+  "tests": {
+    "comando": "./gradlew clean test jacocoTestReport",
+    "passed": 34,
+    "total": 34,
+    "coverage": 95.72,
+    "coverage_fuente": "build/reports/jacoco/test/jacocoTestReport.xml"
+  },
+  "security": {
+    "fuente": "grep manual sobre src/main/java y src/main/resources (Semgrep MCP no disponible en este entorno de ejecucion)",
+    "critical": 0,
+    "high": 2,
+    "secrets": 0,
+    "hallazgos": [
+      {
+        "archivo": "src/main/java/org/ups/citasalud/interfaces/rest/config/SecurityConfig.java",
+        "linea": 18,
+        "regla": "csrf-disabled",
+        "severidad": "HIGH",
+        "descripcion": "CSRF protection is disabled (.csrf(csrf -> csrf.disable())). Aceptable para APIs REST stateless con httpBasic, pero debe revisarse si se agregan cookies de sesion."
+      },
+      {
+        "archivo": "src/main/java/org/ups/citasalud/interfaces/rest/config/SecurityConfig.java",
+        "linea": 21,
+        "regla": "h2-console-permitAll",
+        "severidad": "HIGH",
+        "descripcion": "La consola H2 (/h2-console/**) esta expuesta sin autenticacion y con frameOptions deshabilitadas (linea 28). Riesgo critico si este perfil llega a produccion; aceptable solo en entorno de desarrollo/test."
+      }
+    ]
+  },
+  "spec": "specs/001-reserva-cita-online/spec.md",
+  "criteria": [
+    {
+      "id": "FR-001",
+      "fuente": "spec.md FR-001",
+      "status": "cumple",
+      "evidencia": "ConsultarDisponibilidadServiceTest.consultar_retornaFranjasDisponibles() (src/test/.../ConsultarDisponibilidadServiceTest.java:47) verifica busqueda por medicoId y rango de fechas. DisponibilidadControllerIT (3 tests) ejercita el endpoint REST. No hay restriccion horaria en el servicio."
+    },
+    {
+      "id": "FR-002",
+      "fuente": "spec.md FR-002",
+      "status": "cumple",
+      "evidencia": "ConsultarDisponibilidadServiceTest.consultar_retornaFranjasDisponibles() (linea 55) llama franjaRepository.findDisponibles() que filtra por DISPONIBLE. Solo franjas disponibles son devueltas al cliente."
+    },
+    {
+      "id": "FR-003",
+      "fuente": "spec.md FR-003",
+      "status": "cumple",
+      "evidencia": "ReservarCitaServiceTest.reservar_franjaDisponible_creaYConfirmaLaCita() (linea 50) y Cucumber @us1-1 (reservar_cita.feature:8) verifican flujo unico: seleccionar franja -> confirmar -> cita CONFIRMADA."
+    },
+    {
+      "id": "FR-004",
+      "fuente": "spec.md FR-004",
+      "status": "cumple",
+      "evidencia": "ReservarCitaServiceTest.reservar_franjaDisponible_creaYConfirmaLaCita() (linea 63) afirma EstadoCita.CONFIRMADA. ConcurrenciaReservaIT.dosReservasConcurrentes_soloUnaEsExitosa() (src/test/.../ConcurrenciaReservaIT.java:39) usa ExecutorService con 2 hilos concurrentes y afirma exitosas==1 y total_citas==1."
+    },
+    {
+      "id": "FR-005",
+      "fuente": "spec.md FR-005",
+      "status": "cumple",
+      "evidencia": "WhatsAppNotificacionAdapterTest.enviar_stubMode_mensajeContieneNombreMedicoEspecialidadFechaHoraConsultorio() (src/test/.../WhatsAppNotificacionAdapterTest.java:69-102) captura el log 'WhatsApp stub:' y ejecuta assertAll con 5 afirmaciones de CONTENIDO: mensajeLog.contains('Dr. Garcia Lopez') [linea 92], mensajeLog.contains('Cardiologia') [94], mensajeLog.contains('C-204') [96], mensajeLog.contains('2026-07-15') [98], mensajeLog.contains('10:30') [100]. No es un verify(any()): afirma los campos requeridos por spec."
+    },
+    {
+      "id": "FR-006",
+      "fuente": "spec.md FR-006",
+      "status": "cumple",
+      "evidencia": "Tres partes cubiertas: (a) cita CONFIRMADA cuando WhatsApp falla: ReservarCitaServiceTest.reservar_fallaWhatsApp_citaQuedaConfirmadaSinLanzarExcepcion() linea 99 afirma EstadoCita.CONFIRMADA tras doThrow en notificacionPort. (b) notificacion FALLIDA en repo: WhatsAppNotificacionAdapterTest.enviar_fallaEnvio_guardaNotificacionFallidaYPropagaExcepcion() lineas 144-148, ArgumentCaptor<Notificacion> + assertEquals(FALLIDA, captor.getValue().getEstado()) + assertNotNull(error) + contains('DB timeout'). (c) reintento @Retryable: WhatsAppNotificacionAdapterRetryIT.enviar_proveedorNoDisponible_reintenta3VecesYGuardaFallida() (lineas 64-91) usa @SpringBootTest + SyncTaskExecutor, verifica atLeast(1) save y estado FALLIDA; enviar_falla2VecesLuego3Exitoso_notificacionQuedaEnviada() verifica atLeast(3) saves (maxAttempts=3)."
+    },
+    {
+      "id": "FR-007",
+      "fuente": "spec.md FR-007",
+      "status": "cumple",
+      "evidencia": "ReservarCitaServiceTest.reservar_franjaOcupada_lanzaFranjaNoDisponibleException() (linea 70) rechaza con FranjaNoDisponibleException. Cucumber @us2-1 (franja_ocupada.feature:8) verifica HTTP 409, codigo FRANJA_NO_DISPONIBLE y presencia de 'alternativas' en body."
+    },
+    {
+      "id": "FR-008",
+      "fuente": "spec.md FR-008",
+      "status": "cumple",
+      "evidencia": "El spec.md (linea 77) indica que FR-008 esta cubierto por FR-004: la franja permanece DISPONIBLE hasta que POST /v1/citas sea procesado atomicamente. ConcurrenciaReservaIT (linea 39) confirma que no hay retencion previa: ambas solicitudes llegan concurrentes y solo una prospera via bloqueo optimista."
+    },
+    {
+      "id": "FR-009",
+      "fuente": "spec.md FR-009",
+      "status": "cumple",
+      "evidencia": "CitaRepositoryAdapterIT.findByPacienteId_retornaCitasDelPaciente() (linea 45) y findByPacienteId_conFiltroEstado_retorlasSolasConfirmadas() (linea 56) verifican recuperacion por pacienteId con filtro de estado. Cucumber @us1-2 (reservar_cita.feature:17) hace GET /v1/citas y afirma total >= 1."
+    },
+    {
+      "id": "EC-001",
+      "fuente": "spec.md Edge Cases (linea 59)",
+      "status": "cumple",
+      "evidencia": "WhatsAppNotificacionAdapterRetryIT (2 tests, src/test/.../WhatsAppNotificacionAdapterRetryIT.java) cubre EC-001 explicitamente (comentario linea 31-32). Test 1 (linea 64): proveedor no disponible -> @Retryable -> notificacion FALLIDA (assertEquals FALLIDA, linea 90). Test 2 (linea 95): verifica atLeast(3) saves = 3 intentos. Cita queda CONFIRMADA: ReservarCitaServiceTest.reservar_fallaWhatsApp_citaQuedaConfirmadaSinLanzarExcepcion() (linea 81-101)."
+    },
+    {
+      "id": "EC-002",
+      "fuente": "spec.md Edge Cases (linea 61, User Story 2 scenario 2)",
+      "status": "cumple",
+      "evidencia": "ConcurrenciaReservaIT.dosReservasConcurrentes_soloUnaEsExitosa() (src/test/.../ConcurrenciaReservaIT.java:39): ExecutorService 2 hilos, ambos intentan la misma franja (bb000005). assertEquals(1, exitosas) afirma solo una exitosa; assertEquals(1, total) afirma cero duplicados en base de datos."
+    },
+    {
+      "id": "EC-003",
+      "fuente": "spec.md Edge Cases (linea 60)",
+      "status": "cumple",
+      "evidencia": "ConsultarDisponibilidadServiceTest.consultar_medicoSinFranjas_retornaAlternativasMismaEspecialidad() (src/test/.../ConsultarDisponibilidadServiceTest.java:66): medico solicitado sin franjas -> busca por especialidad -> assertEquals(medicoAlternativo, resultado.get(0).medico().id())."
+    },
+    {
+      "id": "EC-004",
+      "fuente": "spec.md Edge Cases (linea 62)",
+      "status": "cumple",
+      "evidencia": "ReservarCitaServiceTest.reservar_pacienteConCitaActivaMismoMedico_retornaAdvertencia() (src/test/.../ReservarCitaServiceTest.java:114): paciente con cita activa misma semana -> assertEquals(CONFIRMADA) + assertNotNull(advertencia) + advertencia.contains('cita activa'). Permite pero advierte."
+    }
+  ]
+}

@@ -1,0 +1,332 @@
+openapi: 3.0.3
+info:
+  title: CitaSalud API
+  description: API de reserva de citas médicas en línea 24/7
+  version: 1.0.0
+  contact:
+    name: Equipo CitaSalud
+    email: dev@citasalud.ups.org
+
+servers:
+  - url: http://localhost:8080
+    description: Servidor de desarrollo local
+  - url: https://api.citasalud.ups.org
+    description: Servidor de producción
+
+tags:
+  - name: disponibilidad
+    description: Consulta de franjas horarias disponibles
+  - name: citas
+    description: Gestión de reservas de citas
+
+paths:
+
+  /v1/disponibilidad:
+    get:
+      tags:
+        - disponibilidad
+      operationId: consultarDisponibilidad
+      summary: Consultar franjas horarias disponibles
+      description: >
+        Retorna las franjas horarias con estado DISPONIBLE para un médico o especialidad
+        dentro de un rango de fechas. El sistema opera 24/7.
+      parameters:
+        - name: medicoId
+          in: query
+          required: false
+          description: Identificador UUID del médico. Requerido si especialidadId no se proporciona.
+          schema:
+            type: string
+            format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        - name: especialidadId
+          in: query
+          required: false
+          description: Filtro por especialidad médica. Requerido si medicoId no se proporciona.
+          schema:
+            type: string
+            maxLength: 100
+          example: "Medicina General"
+        - name: fechaDesde
+          in: query
+          required: true
+          description: Fecha de inicio del rango de búsqueda (inclusive), formato ISO 8601.
+          schema:
+            type: string
+            format: date
+          example: "2026-07-01"
+        - name: fechaHasta
+          in: query
+          required: true
+          description: Fecha de fin del rango de búsqueda (inclusive), formato ISO 8601. Máximo 30 días después de fechaDesde.
+          schema:
+            type: string
+            format: date
+          example: "2026-07-15"
+      responses:
+        "200":
+          description: Lista de franjas horarias disponibles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisponibilidadResponse'
+              example:
+                medico:
+                  id: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  nombre: "Dr. Carlos Pérez"
+                  especialidad: "Medicina General"
+                  consultorio: "Consultorio 3 - Piso 2"
+                franjas:
+                  - id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                    fecha: "2026-07-05"
+                    horaInicio: "09:00"
+                    horaFin: "09:30"
+                  - id: "8a6e6679-7425-40de-944b-e07fc1f90ae8"
+                    fecha: "2026-07-05"
+                    horaInicio: "10:00"
+                    horaFin: "10:30"
+        "400":
+          description: Parámetros de búsqueda inválidos (ej. rango de fechas > 30 días, medicoId y especialidadId ambos ausentes)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Médico no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/citas:
+    post:
+      tags:
+        - citas
+      operationId: reservarCita
+      summary: Reservar una cita médica
+      description: >
+        Confirma la reserva de una franja horaria disponible para el paciente autenticado.
+        La operación es atómica: si la franja ya fue tomada, retorna 409.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservaCitaRequest'
+            example:
+              franjaHorariaId: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+      responses:
+        "201":
+          description: Cita reservada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CitaResponse'
+              example:
+                id: "a1b2c3d4-1234-5678-abcd-ef1234567890"
+                pacienteId: "b2c3d4e5-2345-6789-bcde-f12345678901"
+                medico:
+                  id: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  nombre: "Dr. Carlos Pérez"
+                  especialidad: "Medicina General"
+                  consultorio: "Consultorio 3 - Piso 2"
+                franja:
+                  fecha: "2026-07-05"
+                  horaInicio: "09:00"
+                  horaFin: "09:30"
+                estado: "CONFIRMADA"
+                creadoEn: "2026-06-27T22:15:00Z"
+        "400":
+          description: Datos de solicitud inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Paciente no autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "409":
+          description: La franja horaria ya no está disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FranjaNoDisponibleResponse'
+              example:
+                codigo: "FRANJA_NO_DISPONIBLE"
+                mensaje: "La franja seleccionada ya no está disponible."
+                alternativas:
+                  - id: "8a6e6679-7425-40de-944b-e07fc1f90ae8"
+                    fecha: "2026-07-05"
+                    horaInicio: "10:00"
+                    horaFin: "10:30"
+
+    get:
+      tags:
+        - citas
+      operationId: consultarCitasPaciente
+      summary: Consultar citas del paciente autenticado
+      description: Retorna el listado de citas del paciente con filtro opcional por estado.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: estado
+          in: query
+          required: false
+          description: Filtro por estado de la cita.
+          schema:
+            $ref: '#/components/schemas/EstadoCita'
+      responses:
+        "200":
+          description: Lista de citas del paciente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CitasListResponse'
+        "401":
+          description: Paciente no autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    ReservaCitaRequest:
+      type: object
+      required:
+        - franjaHorariaId
+      properties:
+        franjaHorariaId:
+          type: string
+          format: uuid
+          description: UUID de la franja horaria a reservar.
+
+    CitaResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pacienteId:
+          type: string
+          format: uuid
+        medico:
+          $ref: '#/components/schemas/MedicoInfo'
+        franja:
+          $ref: '#/components/schemas/FranjaInfo'
+        estado:
+          $ref: '#/components/schemas/EstadoCita'
+        creadoEn:
+          type: string
+          format: date-time
+
+    CitasListResponse:
+      type: object
+      properties:
+        citas:
+          type: array
+          items:
+            $ref: '#/components/schemas/CitaResponse'
+        total:
+          type: integer
+          format: int32
+
+    DisponibilidadResponse:
+      type: object
+      properties:
+        medico:
+          $ref: '#/components/schemas/MedicoInfo'
+        franjas:
+          type: array
+          items:
+            $ref: '#/components/schemas/FranjaDisponibleInfo'
+
+    FranjaNoDisponibleResponse:
+      type: object
+      properties:
+        codigo:
+          type: string
+          example: "FRANJA_NO_DISPONIBLE"
+        mensaje:
+          type: string
+        alternativas:
+          type: array
+          items:
+            $ref: '#/components/schemas/FranjaDisponibleInfo'
+
+    MedicoInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        especialidad:
+          type: string
+        consultorio:
+          type: string
+
+    FranjaInfo:
+      type: object
+      properties:
+        fecha:
+          type: string
+          format: date
+        horaInicio:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          example: "09:00"
+        horaFin:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          example: "09:30"
+
+    FranjaDisponibleInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        fecha:
+          type: string
+          format: date
+        horaInicio:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          example: "09:00"
+        horaFin:
+          type: string
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          example: "09:30"
+
+    EstadoCita:
+      type: string
+      enum:
+        - CONFIRMADA
+        - CANCELADA
+        - COMPLETADA
+
+    ErrorResponse:
+      type: object
+      properties:
+        codigo:
+          type: string
+        mensaje:
+          type: string
+        timestamp:
+          type: string
+          format: date-time

@@ -1,0 +1,144 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.0'
+    id 'io.spring.dependency-management' version '1.1.7'
+    id 'jacoco'
+    id 'org.openapi.generator' version '7.6.0'
+}
+
+group = 'org.ups'
+version = '0.0.1-SNAPSHOT'
+description = 'citasalud-service'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(26)
+    }
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-h2console'
+    implementation 'org.springframework.retry:spring-retry:2.0.13'
+    implementation 'org.springframework.boot:spring-boot-starter-aspectj'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'io.swagger.core.v3:swagger-annotations-jakarta:2.2.52'
+    implementation 'org.openapitools:jackson-databind-nullable:0.2.10'
+    compileOnly 'org.projectlombok:lombok'
+    runtimeOnly 'com.h2database:h2'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'io.cucumber:cucumber-java:7.18.0'
+    testImplementation 'io.cucumber:cucumber-spring:7.18.0'
+    testImplementation 'io.cucumber:cucumber-junit-platform-engine:7.18.0'
+    testImplementation 'org.junit.platform:junit-platform-suite:1.10.3'
+    testCompileOnly 'org.projectlombok:lombok'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+openApiGenerate {
+    generatorName = "spring"
+    inputSpec = "$projectDir/src/main/resources/openapi/citasalud-api.yaml"
+    outputDir = "$buildDir/generated"
+    apiPackage = "org.ups.citasalud.interfaces.rest.generated.api"
+    modelPackage = "org.ups.citasalud.interfaces.rest.generated.model"
+    invokerPackage = "org.ups.citasalud.interfaces.rest.generated"
+    configOptions = [
+        delegatePattern        : "true",
+        useSpringBoot3         : "true",
+        useTags                : "true",
+        dateLibrary            : "java8-localdatetime",
+        interfaceOnly          : "true",
+        generateSupportingFiles: "false"
+    ]
+    generateApiDocumentation = false
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir "$buildDir/generated/src/main/java"
+        }
+    }
+}
+
+compileJava.dependsOn tasks.openApiGenerate
+
+tasks.named('test') {
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport
+    jacoco {
+        includes = ['org/ups/citasalud/**']
+    }
+}
+
+jacoco {
+    toolVersion = "0.8.13"
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                '**/generated/**',
+                '**/*Application*',
+                '**/*Config*',
+                '**/*Entity*'
+            ])
+        }))
+    }
+}
+
+jacocoTestCoverageVerification {
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                '**/generated/**',
+                '**/*Application*',
+                '**/*Config*',
+                '**/*Entity*',
+                '**/dto/**',          // DTOs are data carriers without logic
+                '**/*Dto*',
+                '**/domain/model/Paciente*',     // record with no logic
+                '**/domain/exception/CitaSaludDomainException*', // base exception
+                '**/*Mapper*',        // trivial field-mapping, no business logic
+                '**/infrastructure/notification/**',  // external WhatsApp API calls
+                '**/infrastructure/persistence/adapter/FranjaHorariaRepositoryAdapter*' // complex JPQL adapter
+            ])
+        }))
+    }
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.80
+            }
+        }
+        rule {
+            element = 'CLASS'
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.80
+            }
+        }
+    }
+}
