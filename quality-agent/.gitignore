@@ -1,0 +1,19 @@
+# Gradle / build
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Reportes generados por el agente (viven dentro del proyecto)
+**/quality-output/report.html
+
+# Secretos / entorno (¡nunca commitear tokens!)
+.env
+*.local
+
+# MCP local scope (no versionar settings personales)
+.claude/settings.local.json
